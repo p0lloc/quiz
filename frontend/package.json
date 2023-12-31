@@ -20,5 +20,9 @@
     "tslib": "^2.6.2",
     "typescript": "^5.2.2",
     "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "svelte-routing": "^2.11.0",
+    "svelte-spa-router": "^4.0.0"
   }
 }

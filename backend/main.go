@@ -88,6 +88,7 @@ func main() {
 
 	app.Get("/funny", rootRoute)
 	app.Post("/join", handleJoin)
+	app.Get("/app/*", allApp)
 
 	app.Get("/api/quizzes", getQuizzes)
 	app.Post("/api/quizzes", createQuiz)
@@ -114,6 +115,10 @@ func getGameByCode(code string) *Game {
 	}
 
 	return nil
+}
+
+func allApp(c *fiber.Ctx) error {
+	return c.SendString("app!")
 }
 
 func hostQuiz(c *fiber.Ctx) error {
