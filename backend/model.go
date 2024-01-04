@@ -1,5 +1,11 @@
 package main
 
+type User struct {
+	Id       string
+	Username string
+	Password string `json:"-"`
+}
+
 type Quiz struct {
 	Id        string         `json:"id"`
 	Name      string         `json:"name"`
