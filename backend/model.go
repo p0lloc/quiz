@@ -1,7 +1,9 @@
 package main
 
+import "go.mongodb.org/mongo-driver/bson/primitive"
+
 type User struct {
-	Id       string
+	Id       primitive.ObjectID `bson:"_id"`
 	Username string
 	Password string `json:"-"`
 }
