@@ -1,12 +1,18 @@
 package main
 
 import (
+	"context"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/matthewhartstonge/argon2"
 )
@@ -61,16 +67,19 @@ var Games []Game = []Game{
 	},
 }
 
-var Users []User = []User{}
-
 type Game struct {
 	Id     string `json:"id"`
 	Code   string `json:"code"`
 	QuizId string `json:"quizId"`
 }
 
+var userCollection *mongo.Collection
+var backgroundContext context.Context = context.Background()
+
 func main() {
 	app := fiber.New()
+
+	setupDb()
 
 	app.Use(cors.New())
 	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
@@ -107,6 +116,17 @@ func main() {
 	log.Fatal(app.Listen(":3000"))
 }
 
+func setupDb() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		panic(err)
+	}
+
+	userCollection = client.Database("quiz").Collection("user")
+}
+
 func getQuizById(id string) *Quiz {
 	for _, quiz := range Quizzes {
 		if quiz.Id == id {
@@ -127,14 +147,22 @@ func getGameByCode(code string) *Game {
 	return nil
 }
 
-func getUserByUsername(username string) *User {
-	for _, user := range Users {
-		if user.Username == username {
-			return &user
+func getUserByUsername(username string) (*User, error) {
+	cursor := userCollection.FindOne(backgroundContext, bson.M{"username": username})
+	err := cursor.Err()
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		} else {
+			return nil, err
 		}
 	}
 
-	return nil
+	var user User
+	cursor.Decode(&user)
+
+	return &user, nil
 }
 
 func register(c *fiber.Ctx) error {
@@ -150,7 +178,11 @@ func register(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Passwords not matching!")
 	}
 
-	existing := getUserByUsername(username)
+	existing, err := getUserByUsername(username)
+	if err != nil {
+		return err
+	}
+
 	if existing != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("User already exists!")
 	}
@@ -160,11 +192,15 @@ func register(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
-	Users = append(Users, User{
-		Id:       "superuniqueid",
+	_, err = userCollection.InsertOne(backgroundContext, User{
+		Id:       primitive.NewObjectID(),
 		Username: username,
 		Password: string(hashed),
 	})
+
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -177,7 +213,11 @@ func login(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusBadRequest)
 	}
 
-	existing := getUserByUsername(username)
+	existing, err := getUserByUsername(username)
+	if err != nil {
+		return err
+	}
+
 	if existing == nil {
 		return c.Status(fiber.StatusBadRequest).SendString("User doesn't exist!")
 	}
